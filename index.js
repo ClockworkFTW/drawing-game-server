@@ -6,6 +6,7 @@ const fs = require("fs");
 const PORT = process.env.PORT || 3005;
 
 const games = require("./games");
+const { updateGame } = require("./games");
 
 const words = fs.readFileSync("./words.txt", "utf-8").split("\n");
 
@@ -90,6 +91,8 @@ const startTimer = (gameId) => {
     io.to(game.id).emit("timer", game.timer);
     game = games.updateGame(game.id, "timer", game.timer - 1);
 
+    revealLetter(game);
+
     // When timer runs out, clear interval and start new turn
     if (game.timer < 0) {
       clearInterval(timer);
@@ -150,7 +153,10 @@ io.on("connection", (socket) => {
   socket.on("pick word", (word) => {
     const player = games.getPlayer(socket.id);
 
+    const hiddenWord = word.replace(/./g, "_");
+
     games.updateGame(player.game, "word", word);
+    games.updateGame(player.game, "hiddenWord", hiddenWord);
 
     socket.broadcast.to(player.game).emit("word", word.replace(/./g, "_"));
 
@@ -237,6 +243,38 @@ const turnOver = (players) => {
     }
   });
   return pass;
+};
+
+const revealLetter = ({ id, timer, word, hiddenWord }) => {
+  [...word].forEach((x, i) => {
+    // Check to see if letter should be revealed (80 should not be hardcoded)
+    if (timer === Math.floor(80 / i)) {
+      // Get a random letter index that has not been shown yet
+      let hiddenLetters = [];
+      [...hiddenWord].forEach((l, i) => {
+        if (l === "_") {
+          hiddenLetters.push(i);
+        }
+      });
+      const randomIndex =
+        hiddenLetters[Math.floor(Math.random() * hiddenLetters.length)];
+
+      // Reveal the letter based on the random index
+      const updatedHiddenWord = [...hiddenWord]
+        .map((x, j) => {
+          if (x !== "_" || j === randomIndex) {
+            return word[j];
+          } else {
+            return "_";
+          }
+        })
+        .join("");
+
+      // Update the hiddenWord and emit to client
+      updateGame(id, "hiddenWord", updatedHiddenWord);
+      io.to(id).emit("word", updatedHiddenWord);
+    }
+  });
 };
 
 server.listen(PORT, () => console.log(`Server running on port: ${PORT}`));
