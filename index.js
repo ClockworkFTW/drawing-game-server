@@ -130,10 +130,16 @@ io.on("connection", (socket) => {
       games.updateGame(player.game, playing, true);
 
       return startTurn(player.game);
-    } else {
+    }
+    // Else alert the players
+    else {
+      const playersNeeded = 3 - players.length;
+
       io.to(player.game).emit(
         "alert",
-        `waiting for ${3 - players.length} more players`
+        `waiting for ${playersNeeded} more player${
+          playersNeeded === 1 ? "" : "s"
+        }`
       );
     }
 
@@ -146,9 +152,9 @@ io.on("connection", (socket) => {
 
     games.updateGame(player.game, "word", word);
 
-    socket.broadcast.to(player.game).emit("alert", word.replace(/./g, "_"));
+    socket.broadcast.to(player.game).emit("word", word.replace(/./g, "_"));
 
-    socket.emit("alert", word);
+    socket.emit("word", word);
 
     startTimer(player.game);
   });
