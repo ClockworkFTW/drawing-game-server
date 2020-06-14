@@ -14,6 +14,9 @@ const startTurn = (gameId) => {
   let game = games.getGame(gameId);
   let players = games.getPlayersInGame(gameId);
 
+  // Reset canvas
+  io.to(game.id).emit("draw", []);
+
   // Filter out players who have already drawn
   let eligiblePlayers = players.filter((player) => !player.hasDrawn);
 
@@ -43,6 +46,9 @@ const startTurn = (gameId) => {
     const winner = players.sort((a, b) => b.score - a.score)[0];
     return io.to(game.id).emit("alert", `${winner.name} has won the game!`);
   }
+
+  // Emit round number to client
+  io.to(game.id).emit("round", game.round);
 
   // Designate a random eligible player as drawer
   const drawer =
@@ -170,7 +176,7 @@ io.on("connection", (socket) => {
     const player = games.getPlayer(socket.id);
 
     if (player.drawing) {
-      socket.broadcast.emit("draw", lines);
+      socket.broadcast.to(player.game).emit("draw", lines);
     }
   });
 
