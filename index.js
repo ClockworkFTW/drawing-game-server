@@ -6,6 +6,7 @@ const fs = require("fs");
 const PORT = process.env.PORT || 3005;
 
 const games = require("./games");
+const { getGame } = require("./games");
 
 const words = fs.readFileSync("./words.txt", "utf-8").split("\n");
 
@@ -227,6 +228,9 @@ io.on("connection", (socket) => {
   // Disconnect
   socket.on("disconnect", () => {
     const player = games.removePlayer(socket.id);
+    const players = games.getPlayersInGame(player.game);
+
+    console.log(players);
 
     if (player) {
       io.to(player.game).emit("chat", {
@@ -234,9 +238,18 @@ io.on("connection", (socket) => {
         text: `${player.name} has left the game`,
       });
 
-      io.to(player.game).emit("players", {
-        players: games.getPlayersInGame(player.game),
-      });
+      io.to(player.game).emit("players", players);
+
+      if (players.length < 3) {
+        const playersNeeded = 3 - players.length;
+
+        io.to(player.game).emit(
+          "alert",
+          `waiting for ${playersNeeded} more player${
+            playersNeeded === 1 ? "" : "s"
+          }`
+        );
+      }
     }
   });
 });
