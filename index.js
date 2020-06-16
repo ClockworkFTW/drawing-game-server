@@ -6,7 +6,6 @@ const fs = require("fs");
 const PORT = process.env.PORT || 3005;
 
 const games = require("./games");
-const { getGame } = require("./games");
 
 const words = fs.readFileSync("./words.txt", "utf-8").split("\n");
 
@@ -112,12 +111,12 @@ const startTimer = (gameId) => {
 
 io.on("connection", (socket) => {
   // Join
-  socket.on("join", ({ name, game }, cb) => {
+  socket.on("join", ({ name, gameId }, cb) => {
     // Add player to game
     const { player, error } = games.addPlayer({
       id: socket.id,
       name,
-      gameId: game,
+      gameId,
     });
 
     // If error exists, return error to client
@@ -131,16 +130,17 @@ io.on("connection", (socket) => {
     });
 
     let players = games.getPlayersInGame(player.game);
-    const { id, playing } = games.getGame(player.game);
+    const game = games.getGame(player.game);
 
-    if (!playing) {
-      // If there are three or more players set game to playing and start new turn
+    // If the game has not started...
+    if (!game.playing) {
+      // Start new turn if there are three or more players
       if (players.length >= 3) {
-        games.updateGame(id, "playing", true);
+        games.updateGame(game.id, "playing", true);
 
-        return startTurn(id);
+        startTurn(game.id);
       }
-      // Else alert the players
+      // Otherwise, alert the players
       else {
         const playersNeeded = 3 - players.length;
 
@@ -153,6 +153,20 @@ io.on("connection", (socket) => {
       }
     }
 
+    // Else emit alert or word
+    else {
+      const drawer = players.find((player) => player.drawing).name;
+
+      game.timer === 80
+        ? socket.emit("alert", `${drawer} is picking a word`)
+        : socket.emit("word", game.hiddenWord);
+    }
+
+    // Always emit round and timer
+    socket.emit("round", game.round);
+    socket.emit("timer", game.timer);
+
+    // Update client players state
     io.to(player.game).emit("players", players);
   });
 
@@ -230,9 +244,8 @@ io.on("connection", (socket) => {
     const player = games.removePlayer(socket.id);
     const players = games.getPlayersInGame(player.game);
 
-    console.log(players);
-
     if (player) {
+      // Notify players that player has left the game
       io.to(player.game).emit("chat", {
         player: "admin",
         text: `${player.name} has left the game`,
@@ -240,8 +253,16 @@ io.on("connection", (socket) => {
 
       io.to(player.game).emit("players", players);
 
+      // If the player was drawing start new turn
+      if (player.drawing) {
+        startTurn(player.game);
+      }
+
+      // If the number of players drops below 3, alert players and pause the game
       if (players.length < 3) {
         const playersNeeded = 3 - players.length;
+
+        // TODO: pause game
 
         io.to(player.game).emit(
           "alert",

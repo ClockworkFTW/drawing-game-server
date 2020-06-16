@@ -8,7 +8,7 @@ const updateGame = (gameId, prop, val) => {
     if (game.id === gameId) {
       return { ...game, [prop]: val };
     } else {
-      return word;
+      return game;
     }
   });
   return games.find((game) => game.id === gameId);
