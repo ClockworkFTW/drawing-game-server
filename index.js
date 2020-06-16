@@ -6,7 +6,6 @@ const fs = require("fs");
 const PORT = process.env.PORT || 3005;
 
 const games = require("./games");
-const { updateGame } = require("./games");
 
 const words = fs.readFileSync("./words.txt", "utf-8").split("\n");
 
@@ -131,25 +130,26 @@ io.on("connection", (socket) => {
     });
 
     let players = games.getPlayersInGame(player.game);
-    const { playing } = games.getGame(player.game);
+    const { id, playing } = games.getGame(player.game);
 
-    // If there are three or more players in the game
-    if (players.length >= 3 && !playing) {
-      // Set game to playing and start new turn
-      games.updateGame(player.game, playing, true);
+    if (!playing) {
+      // If there are three or more players set game to playing and start new turn
+      if (players.length >= 3) {
+        games.updateGame(id, "playing", true);
 
-      return startTurn(player.game);
-    }
-    // Else alert the players
-    else {
-      const playersNeeded = 3 - players.length;
+        return startTurn(id);
+      }
+      // Else alert the players
+      else {
+        const playersNeeded = 3 - players.length;
 
-      io.to(player.game).emit(
-        "alert",
-        `waiting for ${playersNeeded} more player${
-          playersNeeded === 1 ? "" : "s"
-        }`
-      );
+        io.to(player.game).emit(
+          "alert",
+          `waiting for ${playersNeeded} more player${
+            playersNeeded === 1 ? "" : "s"
+          }`
+        );
+      }
     }
 
     io.to(player.game).emit("players", players);
@@ -277,7 +277,7 @@ const revealLetter = ({ id, timer, word, hiddenWord }) => {
         .join("");
 
       // Update the hiddenWord and emit to client
-      updateGame(id, "hiddenWord", updatedHiddenWord);
+      games.updateGame(id, "hiddenWord", updatedHiddenWord);
       io.to(id).emit("word", updatedHiddenWord);
     }
   });
