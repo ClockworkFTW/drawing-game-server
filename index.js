@@ -312,7 +312,14 @@ const revealLetter = ({ id, timer, word, hiddenWord }) => {
 
       // Update the hiddenWord and emit to client
       games.updateGame(id, "hiddenWord", updatedHiddenWord);
-      io.to(id).emit("word", updatedHiddenWord);
+
+      const players = games.getPlayersInGame(id);
+
+      players.forEach((player) => {
+        if (!player.drawing) {
+          io.to(player.id).emit("word", updatedHiddenWord);
+        }
+      });
     }
   });
 };

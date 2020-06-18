@@ -1,3 +1,5 @@
+const avatar = require("./avatar");
+
 let games = [];
 let players = [];
 
@@ -45,6 +47,7 @@ const addPlayer = ({ id, name, gameId }) => {
   const player = {
     id,
     name,
+    avatar: avatar.generate(),
     score: 0,
     drawing: false,
     hasDrawn: false,
