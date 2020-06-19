@@ -1,5 +1,3 @@
-const avatar = require("./avatar");
-
 let games = [];
 let players = [];
 
@@ -16,7 +14,9 @@ const updateGame = (gameId, prop, val) => {
   return games.find((game) => game.id === gameId);
 };
 
-const addPlayer = ({ id, name, gameId }) => {
+const removeGame = (gameId) => games.filter((game) => game.id !== gameId);
+
+const addPlayer = ({ id, name, gameId, avatar }) => {
   // Find existing game if game id is provided, otherwise join a random existing game
   let game = gameId
     ? games.find((game) => game.id === gameId)
@@ -47,7 +47,7 @@ const addPlayer = ({ id, name, gameId }) => {
   const player = {
     id,
     name,
-    avatar: avatar.generate(),
+    avatar,
     score: 0,
     drawing: false,
     hasDrawn: false,
@@ -115,6 +115,7 @@ const getPlayersInGame = (gameId) =>
 module.exports = {
   getGame,
   updateGame,
+  removeGame,
   addPlayer,
   updatePlayer,
   removePlayer,

@@ -111,12 +111,13 @@ const startTimer = (gameId) => {
 
 io.on("connection", (socket) => {
   // Join
-  socket.on("join", ({ name, gameId }, cb) => {
+  socket.on("join", ({ name, gameId, avatar }, cb) => {
     // Add player to game
     const { player, error } = games.addPlayer({
       id: socket.id,
       name,
       gameId,
+      avatar,
     });
 
     // If error exists, return error to client
@@ -242,9 +243,15 @@ io.on("connection", (socket) => {
   // Disconnect
   socket.on("disconnect", () => {
     const player = games.removePlayer(socket.id);
-    const players = games.getPlayersInGame(player.game);
 
     if (player) {
+      // Close the game if no players are left
+      const players = games.getPlayersInGame(player.game);
+
+      if (players.length === 0) {
+        return games.removeGame(player.game);
+      }
+
       // Notify players that player has left the game
       io.to(player.game).emit("chat", {
         player: "admin",
