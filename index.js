@@ -1,113 +1,17 @@
 const app = require("express")();
 const server = require("http").Server(app);
 const io = require("socket.io")(server);
+
+const path = require("path");
 const fs = require("fs");
 
 const PORT = process.env.PORT || 3005;
 
 const games = require("./games");
 
-const words = fs.readFileSync("./words.txt", "utf-8").split("\n");
-
-const startTurn = (gameId) => {
-  let game = games.getGame(gameId);
-  let players = games.getPlayersInGame(gameId);
-
-  // Reset canvas
-  io.to(game.id).emit("draw", []);
-
-  // Filter out players who have already drawn
-  let eligiblePlayers = players.filter((player) => !player.hasDrawn);
-
-  // If there are no more eligible players, start a new round
-  if (eligiblePlayers.length === 0) {
-    // Reset player state
-    players.forEach((player) => {
-      games.updatePlayer(player.game, player.id, {
-        ...player,
-        drawing: false,
-        hasDrawn: false,
-        locked: false,
-      });
-    });
-
-    // Update game round
-    game = games.updateGame(game.id, "round", game.round + 1);
-
-    // Refresh player data
-    players = games.getPlayersInGame(game.id);
-    eligiblePlayers = games.getPlayersInGame(game.id);
-  }
-
-  // Check to see if game is over
-  if (game.round > 3) {
-    clearInterval(game.t);
-    const winner = players.sort((a, b) => b.score - a.score)[0];
-    return io.to(game.id).emit("alert", `${winner.name} has won the game!`);
-  }
-
-  // Emit round number to client
-  io.to(game.id).emit("round", game.round);
-
-  // Designate a random eligible player as drawer
-  const drawer =
-    eligiblePlayers[Math.floor(Math.random() * eligiblePlayers.length)];
-
-  players.forEach((player) => {
-    // Set new drawer
-    if (player.id === drawer.id) {
-      games.updatePlayer(player.game, player.id, {
-        ...player,
-        drawing: true,
-        hasDrawn: true,
-        locked: false,
-      });
-
-      const wordOptions = Array.apply(null, { length: 3 }).map(
-        (x) => words[Math.floor(Math.random() * words.length)]
-      );
-
-      io.to(player.id).emit("words", wordOptions);
-    }
-
-    // Set new guesser
-    else {
-      games.updatePlayer(player.game, player.id, {
-        ...player,
-        drawing: false,
-        locked: false,
-      });
-
-      io.to(player.id).emit("alert", `${drawer.name} is picking a word`);
-    }
-  });
-
-  // Reset game timer and emit updated player state
-  const { id, timer, t } = games.updateGame(game.id, "timer", 80);
-  clearInterval(t);
-  io.to(id).emit("timer", timer);
-  io.to(id).emit("players", games.getPlayersInGame(id));
-};
-
-const startTimer = (gameId) => {
-  let game = games.getGame(gameId);
-
-  const timer = setInterval(() => {
-    io.to(game.id).emit("timer", game.timer);
-    game = games.updateGame(game.id, "timer", game.timer - 1);
-
-    revealLetter(game);
-
-    // When timer runs out, clear interval and start new turn
-    if (game.timer < 0) {
-      clearInterval(timer);
-      startTurn(game.id);
-    }
-  }, 1000);
-
-  // Add timer to game object so it can be cleared elsewhere
-  games.updateGame(game.id, "t", timer);
-};
+const words = fs
+  .readFileSync(path.join(__dirname, "words.txt"), "utf-8")
+  .split("\n");
 
 io.on("connection", (socket) => {
   // Join
@@ -151,6 +55,9 @@ io.on("connection", (socket) => {
             playersNeeded === 1 ? "" : "s"
           }`
         );
+
+        // Update client players state
+        io.to(player.game).emit("players", players);
       }
     }
 
@@ -161,14 +68,14 @@ io.on("connection", (socket) => {
       game.timer === 80
         ? socket.emit("alert", `${drawer} is picking a word`)
         : socket.emit("word", game.hiddenWord);
+
+      // Update client players state
+      io.to(player.game).emit("players", players);
     }
 
     // Always emit round and timer
     socket.emit("round", game.round);
     socket.emit("timer", game.timer);
-
-    // Update client players state
-    io.to(player.game).emit("players", players);
   });
 
   // Pick Word
@@ -267,9 +174,9 @@ io.on("connection", (socket) => {
 
       // If the number of players drops below 3, alert players and pause the game
       if (players.length < 3) {
-        const playersNeeded = 3 - players.length;
+        games.updateGame(player.game, "playing", false);
 
-        // TODO: pause game
+        const playersNeeded = 3 - players.length;
 
         io.to(player.game).emit(
           "alert",
@@ -281,6 +188,106 @@ io.on("connection", (socket) => {
     }
   });
 });
+
+const startTurn = (gameId) => {
+  let game = games.getGame(gameId);
+  let players = games.getPlayersInGame(gameId);
+
+  // Reset canvas
+  io.to(game.id).emit("draw", []);
+
+  // Filter out players who have already drawn
+  let eligiblePlayers = players.filter((player) => !player.hasDrawn);
+
+  // If there are no more eligible players, start a new round
+  if (eligiblePlayers.length === 0) {
+    // Reset player state
+    players.forEach((player) => {
+      games.updatePlayer(player.game, player.id, {
+        ...player,
+        drawing: false,
+        hasDrawn: false,
+        locked: false,
+      });
+    });
+
+    // Update game round
+    game = games.updateGame(game.id, "round", game.round + 1);
+
+    // Refresh player data
+    players = games.getPlayersInGame(game.id);
+    eligiblePlayers = games.getPlayersInGame(game.id);
+  }
+
+  // Check to see if game is over
+  if (game.round > 3) {
+    clearInterval(game.t);
+    const winner = players.sort((a, b) => b.score - a.score)[0];
+    return io.to(game.id).emit("winner", winner);
+  }
+
+  // Emit round number to client
+  io.to(game.id).emit("round", game.round);
+
+  // Designate a random eligible player as drawer
+  const drawer =
+    eligiblePlayers[Math.floor(Math.random() * eligiblePlayers.length)];
+
+  players.forEach((player) => {
+    // Set new drawer
+    if (player.id === drawer.id) {
+      games.updatePlayer(player.game, player.id, {
+        ...player,
+        drawing: true,
+        hasDrawn: true,
+        locked: false,
+      });
+
+      const wordOptions = Array.apply(null, { length: 3 }).map(
+        (x) => words[Math.floor(Math.random() * words.length)]
+      );
+
+      io.to(player.id).emit("words", wordOptions);
+    }
+
+    // Set new guesser
+    else {
+      games.updatePlayer(player.game, player.id, {
+        ...player,
+        drawing: false,
+        locked: false,
+      });
+
+      io.to(player.id).emit("alert", `${drawer.name} is picking a word`);
+    }
+  });
+
+  // Reset game timer and emit updated player state
+  const { id, timer, t } = games.updateGame(game.id, "timer", 80);
+  clearInterval(t);
+  io.to(id).emit("timer", timer);
+  io.to(id).emit("players", games.getPlayersInGame(id));
+};
+
+const startTimer = (gameId) => {
+  let game = games.getGame(gameId);
+
+  const timer = setInterval(() => {
+    io.to(game.id).emit("timer", game.timer);
+    game = games.updateGame(game.id, "timer", game.timer - 1);
+
+    revealLetter(game);
+
+    // When timer runs out, clear interval and start new turn
+    if (game.timer < 0) {
+      clearInterval(timer);
+      startTurn(game.id);
+    }
+  }, 1000);
+
+  // Add timer to game object so it can be cleared elsewhere
+  games.updateGame(game.id, "t", timer);
+};
 
 const turnOver = (players) => {
   let pass = true;
